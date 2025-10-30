@@ -1,4 +1,6 @@
-# General purpose WSI stitcher for WSI level inference using a patch-based model.
+# General purpose WSI stitcher
+
+Intended for WSI level inference using a patch-based model.
 
 It can also be used with model set to None, in which case a dummy 'pass through' model will be created. This can be used for things like format conversion to tiff, masked rebuilding, or mpp conversion.
 
