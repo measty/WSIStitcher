@@ -26,6 +26,7 @@ CLI options provided by `infer.py`:
 - `--memmap-dir`: optional directory used for intermediate memory-mapped arrays during tiling. defaults to a temp directory in the output folder.
 - `--channels`: optional ordered list of channel names for multi-channel inputs.
 - `--background-colour`: background colour for compositing the output (`white` default, `black` supported).
+- `--mask`: tiatoolbox Tissue mask method (e.g., 'otsu'), path to a mask file, or none for no masking; passed to tiatoolbox SlidingWindowPatchExtractor. Default is 'otsu'.
 
 # An example:
 
