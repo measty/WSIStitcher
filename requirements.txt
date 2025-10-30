@@ -1,0 +1,3 @@
+tiatoolbox
+pyvips
+rich
