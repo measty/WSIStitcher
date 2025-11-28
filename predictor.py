@@ -16,7 +16,7 @@ from tiatoolbox.wsicore import WSIReader
 from utils import get_logger, _generate_colors, _prepare_ome_xml
 
 from stitcher import ChunkedStitcher, PredictionCanvas
-from tiler import WSITiler
+from tiler import PatchInfo, WSITiler
 
 DEFAULT_TIFF_COMPRESSION = {"compression": "jpeg", "compressionargs": {"level": 87}}
 
@@ -41,6 +41,18 @@ def _ensure_tuple(value: float | Sequence[float]) -> Tuple[float, float]:
     raise ValueError(msg)
 
 
+def _save_bounds_extent(
+    patch_infos: Sequence[PatchInfo],
+) -> Tuple[int, int, int, int] | None:
+    if not patch_infos:
+        return None
+    min_x0 = min(info.save_bounds[0] for info in patch_infos)
+    min_y0 = min(info.save_bounds[1] for info in patch_infos)
+    max_x1 = max(info.save_bounds[2] for info in patch_infos)
+    max_y1 = max(info.save_bounds[3] for info in patch_infos)
+    return min_x0, min_y0, max_x1, max_y1
+
+
 def predict_wsi(
     model: nn.Module,
     reader: WSIReader,
@@ -57,6 +69,7 @@ def predict_wsi(
     tissue_mask: str | np.array | None = "otsu",
     min_mask_ratio: float = 0.2,
     background_colour: str = "black",
+    crop: bool = False,
 ) -> PredictionCanvas:
     """Run tiled inference on a whole-slide image and stitch results.
 
@@ -98,13 +111,41 @@ def predict_wsi(
         min_mask_ratio=min_mask_ratio,
     )
 
-    slide_w, slide_h = reader.info.slide_dimensions
-    base_mpp = getattr(reader.info, "mpp", read_mpp_tuple)
-    base_mpp_tuple = _ensure_tuple(base_mpp)
-    scale_x = base_mpp_tuple[0] / save_mpp_tuple[0]
-    scale_y = base_mpp_tuple[1] / save_mpp_tuple[1]
-    width = int(math.ceil(slide_w * scale_x))
-    height = int(math.ceil(slide_h * scale_y))
+    crop_to_mask = bool(crop and tissue_mask is not None)
+    if crop_to_mask:
+        extent = _save_bounds_extent(tiler.patch_infos)
+        if extent is None:
+            logger.warning(
+                "Cropping requested but no patches were generated; using full canvas."
+            )
+            crop_to_mask = False
+        else:
+            min_x0, min_y0, max_x1, max_y1 = extent
+            width = max_x1 - min_x0
+            height = max_y1 - min_y0
+            if width <= 0 or height <= 0:
+                logger.warning(
+                    "Cropping requested but computed extent is empty; using full canvas."
+                )
+                crop_to_mask = False
+            else:
+                logger.info(
+                    "Cropping output canvas to masked bounds at (%d, %d) with size %dx%d",
+                    min_x0,
+                    min_y0,
+                    width,
+                    height,
+                )
+                tiler.rebase_save_bounds(x_offset=min_x0, y_offset=min_y0)
+
+    if not crop_to_mask:
+        slide_w, slide_h = reader.info.slide_dimensions
+        base_mpp = getattr(reader.info, "mpp", read_mpp_tuple)
+        base_mpp_tuple = _ensure_tuple(base_mpp)
+        scale_x = base_mpp_tuple[0] / save_mpp_tuple[0]
+        scale_y = base_mpp_tuple[1] / save_mpp_tuple[1]
+        width = int(math.ceil(slide_w * scale_x))
+        height = int(math.ceil(slide_h * scale_y))
 
     stitcher = ChunkedStitcher(
         shape=(height, width),
@@ -120,9 +161,10 @@ def predict_wsi(
 
     for bounds in tqdm(stitcher.iter_chunk_bounds(), total=total_chunks, desc="Chunks"):
         patch_indices = tiler.query_patch_indices(bounds)
-        if not patch_indices:
-            continue
         chunk_canvas, chunk_weights = stitcher.allocate_chunk_arrays(bounds)
+        if not patch_indices:
+            stitcher.finalize_chunk(bounds, chunk_canvas, chunk_weights)
+            continue
         for start in range(0, len(patch_indices), batch_size):
             batch_indices = patch_indices[start : start + batch_size]
             batch_imgs = tiler.load_batch(batch_indices)
@@ -169,6 +211,7 @@ def save_prediction(
     save_mpp: float | Sequence[float] | None = None,
     pyramid_min_dim: int = 512,
     channels: Sequence[str] | None = None,
+    fliplr: bool = False,
 ) -> None:
     """Save prediction array to ``.npy`` or pyramidal TIFF.
 
@@ -213,6 +256,9 @@ def save_prediction(
     if data.ndim != 3:
         msg = "Prediction array must be 2D or 3D"
         raise ValueError(msg)
+    
+    if fliplr:
+        data = np.fliplr(data)
 
     def _is_channel_first(candidate: np.ndarray) -> bool:
         return (

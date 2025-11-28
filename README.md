@@ -27,11 +27,13 @@ CLI options provided by `infer.py`:
 - `--channels`: optional ordered list of channel names for multi-channel inputs.
 - `--background-colour`: background colour for compositing the output (`white` default, `black` supported).
 - `--mask`: tiatoolbox Tissue mask method (e.g., 'otsu'), path to a mask file, or none for no masking; passed to tiatoolbox SlidingWindowPatchExtractor. Default is 'otsu'.
+- `--fliplr`: will save the final slide flipped left-right if set.
+- `--crop`: will save the final slide cropped to the masked region if set. (has no effct if --mask is none)
 
 # An example:
 
 a command like:
 
-python infer.py -- checkpoint /path/to/checkpoint.pt --wsi "/path/to/slides/*_HE.tiff" --output /path/to/outputs/*_processed.tiff --read_mpp 0.5 --save_mpp 0.25 --overlap 96 --tile-size 512 --batch-size 16
+python infer.py --checkpoint /path/to/checkpoint.pt --wsi "/path/to/slides/*_HE.tiff" --output /path/to/outputs/*_processed.tiff --read_mpp 0.5 --save_mpp 0.25 --overlap 96 --tile-size 512 --batch-size 16
 
 will run inference on all slides in the specified folder matching *_HE.tiff, using the specified checkpoint to load the model. Patches will be read of size tile-size (512) at read_mpp (0.5) (ensure these match the mpp your model is trained at) and will save the output WSI at save_mpp (0.25) mpp (scaling model outputs approriately), with 96 pixels of overlap between tiles for smooth stitching. Outputs will be saved to /path/to/outputs/ with the same stem as the input slides but with _processed.tiff suffix.

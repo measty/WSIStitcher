@@ -122,6 +122,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--mask", type=str, default='otsu', help="tiatoolbox Tissue mask method (e.g., 'otsu'), path to a mask file, or none for no masking; passed to tiatoolbox SlidingWindowPatchExtractor.",
     )
+    p.add_argument(
+        "--crop",
+        action="store_true",
+        help="Crop output canvas to the masked region's bounding box (no effect when --mask is none)",
+    )
+    p.add_argument(
+        "--fliplr",
+        action="store_true",
+        help="Flip the output image left-right",
+    )
     return p
 
 
@@ -152,15 +162,13 @@ def main(argv: list[str] | None = None) -> None:
     else:
         model = load_model(args.checkpoint, cfg)
 
-    read_mpp = args.read_mpp
-    if read_mpp is None:
+    if args.read_mpp is None:
         read_cfg = cfg.get("data", {}).get("mpp")
-        if read_cfg is None:
-            raise ValueError("Unable to determine read_mpp from configuration, provide in CLI")
-        read_vals = np.asarray(read_cfg, dtype=float).flatten()
-        if read_vals.size == 0:
-            raise ValueError("Configured read_mpp is empty")
-        read_mpp = float(read_vals[0])
+        if read_cfg is not None:
+            read_vals = np.asarray(read_cfg, dtype=float).flatten()
+            if read_vals.size == 0:
+                raise ValueError("Configured read_mpp is empty")
+            args.read_mpp = float(read_vals[0])
 
     output_pattern = args.output
     multiple_slides = len(wsi_paths) > 1
@@ -193,6 +201,10 @@ def main(argv: list[str] | None = None) -> None:
             print("using slide baseline mpp for save_mpp")
             save_mpp = float(save_vals[0])
 
+        if args.read_mpp is None:
+            read_mpp = save_mpp
+            print("using save_mpp for read_mpp")
+
         tile_size = args.tile_size
         if tile_size is None:
             tile_cfg = cfg.get("data", {}).get("tile_size")
@@ -219,6 +231,7 @@ def main(argv: list[str] | None = None) -> None:
             memmap_dir=args.memmap_dir,
             background_colour=args.background_colour,
             tissue_mask=args.mask,
+            crop=args.crop,
         )
 
         output_path = _derive_output_path(output_pattern, wsi_path)
@@ -226,7 +239,7 @@ def main(argv: list[str] | None = None) -> None:
 
         try:
             save_prediction(
-                prediction, output_path, save_mpp=save_mpp, channels=channel_names
+                prediction, output_path, save_mpp=save_mpp, channels=channel_names, fliplr=args.fliplr
             )
             print(f"Saved prediction to {output_path}")
         finally:

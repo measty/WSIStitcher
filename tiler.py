@@ -133,6 +133,31 @@ class WSITiler:
         return self._store
 
     # ------------------------------------------------------------------
+    def rebase_save_bounds(self, *, x_offset: int = 0, y_offset: int = 0) -> None:
+        """Shift patch save bounds by the provided offsets and rebuild the index."""
+
+        if x_offset == 0 and y_offset == 0:
+            return
+        rebased: List[PatchInfo] = []
+        for info in self._patch_infos:
+            sx0, sy0, sx1, sy1 = info.save_bounds
+            rebased_bounds = (
+                sx0 - x_offset,
+                sy0 - y_offset,
+                sx1 - x_offset,
+                sy1 - y_offset,
+            )
+            rebased.append(
+                PatchInfo(
+                    index=info.index,
+                    read_bounds=info.read_bounds,
+                    save_bounds=rebased_bounds,
+                )
+            )
+        self._patch_infos = rebased
+        self._store = self._build_patch_index()
+
+    # ------------------------------------------------------------------
     def query_patch_indices(self, bounds: Tuple[int, int, int, int]) -> List[int]:
         if self._store is None:
             x0, y0, x1, y1 = bounds
