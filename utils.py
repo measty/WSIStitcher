@@ -59,24 +59,50 @@ def _prepare_ome_xml(
     colors: Sequence[tuple[int, int, int]],
     pixel_size: tuple[float, float],
 ) -> str:
-    c, h, w = shape
+    """
+    Generate OME-XML for channel-last interleaved TIFF storage (Y, X, S).
+
+    This matches pyvips writing an image with `bands=C` (SamplesPerPixel=C,
+    PlanarConfiguration=CONTIG), i.e. a single 2D plane with interleaved samples.
+    """
+    if len(shape) != 3:
+        raise ValueError("shape must be a 3-tuple")
+
+    # Accept either legacy (C, H, W) or channel-last (H, W, C) inputs.
+    a, b, c = shape
+    if a == len(genes) and b > 32 and c > 32:
+        # Likely (C, H, W)
+        C, H, W = shape
+    else:
+        # Likely (H, W, C)
+        H, W, C = shape
+
     dtype_name = np.dtype(dtype).name
+
     ox = OmeXml()
     ox.addimage(
         dtype=dtype_name,
-        shape=(c, h, w),
-        storedshape=(c, 1, 1, h, w, 1),
-        axes="CYX",
+        # Channel-last interleaved: (Y, X, S)
+        shape=(H, W, C),
+        # storedshape = (planecount, separate, depth, length(Y), width(X), contig(samples))
+        storedshape=(1, 1, 1, H, W, C),
+        axes="YXS",
         Name="GeneExpression",
         PhysicalSizeX=float(pixel_size[0]),
         PhysicalSizeY=float(pixel_size[1]),
     )
+
     root = ET.fromstring(ox.tostring())
     ns = {"ome": "http://www.openmicroscopy.org/Schemas/OME/2016-06"}
-    for channel, gene, color in zip(root.findall(".//ome:Channel", ns), genes, colors):
-        channel.set("Name", gene)
-        channel.set("Color", "#%02X%02X%02X" % color)
 
+    # In this representation there is typically ONE <Channel> with SamplesPerPixel=C.
+    # (OME doesn't have a standard way to name each interleaved sample as a separate Channel.)
+    ch = root.find(".//ome:Channel", ns)
+    if ch is not None:
+        ch.set("Name", "GeneExpression (interleaved samples)")
+        # Optional: leave Color unset or set a neutral value; per-gene colors go below.
+
+    # Keep your per-gene metadata in your custom table
     scan = ET.SubElement(root, "ScanColorTable", {"ref": "gene_colors"})
     for gene, color in zip(genes, colors):
         ET.SubElement(scan, "ScanColorTable-k").text = gene

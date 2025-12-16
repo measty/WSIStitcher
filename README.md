@@ -1,6 +1,8 @@
 # General purpose WSI stitcher
 
-Intended for WSI level inference using a patch-based model.
+Intended for WSI level inference using a patch-based model. Outputs an ome.tiff or .qptiff with ome metadata.
+
+ Designed to be flexible and work with any PyTorch model that takes in image patches and outputs image patches of the same spatial size.
 
 It can also be used with model set to None, in which case a dummy 'pass through' model will be created. This can be used for things like format conversion to tiff, masked rebuilding, or mpp conversion.
 
@@ -21,7 +23,7 @@ CLI options provided by `infer.py`:
 - `--read-mpp`: microns-per-pixel to sample patches from the input WSI.
 - `--save-mpp`: microns-per-pixel to use when writing the output WSI.
 - `--batch-size`: number of tiles processed per forward pass (default `16`).
-- `--output` / `-o`: output file path or globbed template for batch runs (should be `.tiff` or `.qptiff` if multi-channel (i.e not rgb)).
+- `--output` / `-o`: output file path or globbed template for batch runs (should be `.ome.tiff`, or `.qptiff` if multi-channel (i.e not rgb)).
 - `--device`: device identifier such as `cpu`, `cuda`, or `cuda:0` (auto-selects if omitted).
 - `--memmap-dir`: optional directory used for intermediate memory-mapped arrays during tiling. defaults to a temp directory in the output folder.
 - `--channels`: optional ordered list of channel names for multi-channel inputs.
@@ -34,6 +36,6 @@ CLI options provided by `infer.py`:
 
 a command like:
 
-python infer.py --checkpoint /path/to/checkpoint.pt --wsi "/path/to/slides/*_HE.tiff" --output /path/to/outputs/*_processed.tiff --read_mpp 0.5 --save_mpp 0.25 --overlap 96 --tile-size 512 --batch-size 16
+python infer.py --checkpoint /path/to/checkpoint.pt --wsi "/path/to/slides/*_HE.tiff" --output /path/to/outputs/*_processed.ome.tiff --read_mpp 0.5 --save_mpp 0.25 --overlap 96 --tile-size 512 --batch-size 16
 
-will run inference on all slides in the specified folder matching *_HE.tiff, using the specified checkpoint to load the model. Patches will be read of size tile-size (512) at read_mpp (0.5) (ensure these match the mpp your model is trained at) and will save the output WSI at save_mpp (0.25) mpp (scaling model outputs approriately), with 96 pixels of overlap between tiles for smooth stitching. Outputs will be saved to /path/to/outputs/ with the same stem as the input slides but with _processed.tiff suffix.
+will run inference on all slides in the specified folder matching *_HE.tiff, using the specified checkpoint to load the model. Patches will be read of size tile-size (512) at read_mpp (0.5) (ensure these match the mpp your model is trained at) and will save the output WSI at save_mpp (0.25) mpp (scaling model outputs approriately), with 96 pixels of overlap between tiles for smooth stitching. Outputs will be saved to /path/to/outputs/ with the same stem as the input slides but with _processed.ome.tiff suffix.
